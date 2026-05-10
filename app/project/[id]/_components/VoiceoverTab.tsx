@@ -379,10 +379,14 @@ export default function VoiceoverTab({ projectId }: { projectId: string }) {
           <button
             onClick={generateFullAudio}
             disabled={generating || previewGenerating}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-xs font-semibold transition-colors"
+            className={`flex items-center gap-2 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${
+              savedAudioUrl ? "bg-orange-600 hover:bg-orange-500" : "bg-blue-600 hover:bg-blue-500"
+            }`}
           >
             {generating ? (
-                <><span className="animate-spin">⟳</span> Generating…</>
+                <><span className="animate-spin inline-block">⟳</span> Generating…</>
+              ) : savedAudioUrl ? (
+                <>🔄 Regenerate MP3 ({Math.ceil(data.fullText.length / (["openai","kokoro","alltalk","fish"].includes(selectedEngine) ? 4000 : 3500))} chunks)</>
               ) : (
                 <>🎙️ Generate Full MP3 ({Math.ceil(data.fullText.length / (["openai","kokoro","alltalk","fish"].includes(selectedEngine) ? 4000 : 3500))} chunks)</>
               )}
@@ -392,7 +396,7 @@ export default function VoiceoverTab({ projectId }: { projectId: string }) {
             disabled={previewGenerating || generating}
             className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-300 px-4 py-2 rounded-lg text-xs font-medium transition-colors"
           >
-            {previewGenerating ? "⟳ Generating…" : "▶ Quick Preview (first 4k chars)"}
+            {previewGenerating ? "⟳ Generating…" : "▶ Quick Preview (4k chars)"}
           </button>
         </div>
 

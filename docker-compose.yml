@@ -12,14 +12,21 @@ services:
     environment:
       - DATABASE_URL=file:/app/data/dev.db
       - NEXT_PUBLIC_APP_URL=http://localhost:3001
-      # ComfyUI running on host machine — reachable via host.docker.internal
+      # Local services — reachable via host.docker.internal when running on host
+      # Or via service name when running in Docker (see optional services below)
       - COMFYUI_URL=http://host.docker.internal:8188
+      - OLLAMA_URL=http://host.docker.internal:11434
+      # TTS servers — uses host.docker.internal by default
+      # Set to http://kokoro:8880 if using the kokoro service below
+      - KOKORO_URL=http://host.docker.internal:8880
+      - ALLTALK_URL=http://host.docker.internal:7851
+      - FISH_SPEECH_URL=http://host.docker.internal:8080
     volumes:
       # Persist SQLite database across restarts
       - autotube-db:/app/data
       # Persist generated files (images, thumbnails, subtitles, audio)
       - autotube-generated:/app/public/generated
-    # Allow container to reach host services (ComfyUI, Ollama, LM Studio)
+    # Allow container to reach host services (ComfyUI, Ollama, LM Studio, AllTalk, Fish)
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
@@ -29,6 +36,31 @@ services:
       retries: 3
       start_period: 20s
 
+  # ── Optional: Kokoro TTS (best free quality) ────────────────────────────────
+  # Start with: docker compose --profile tts up -d
+  # Or always on: change "tts" profile to remove it and just keep the service
+  kokoro:
+    image: ghcr.io/remsky/kokoro-fastapi-cpu:v0.2.2
+    container_name: kokoro-tts
+    profiles: ["tts"]
+    restart: unless-stopped
+    ports:
+      - "8880:8880"
+
+  # ── Optional: Ollama (local LLM) ────────────────────────────────────────────
+  # Start with: docker compose --profile llm up -d
+  # Requires GPU for good performance — CPU mode is slow
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    profiles: ["llm"]
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+
 volumes:
   autotube-db:
   autotube-generated:
+  ollama-models:

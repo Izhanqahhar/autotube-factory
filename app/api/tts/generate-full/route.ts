@@ -3,13 +3,18 @@
  *
  * Generates a full-length MP3 for a project's voiceover.
  *
- * Engines:
- *   edge   — Microsoft Edge TTS (FREE, no key, Python required, high quality neural voices)
- *   gtts   — Google Text-to-Speech (FREE, no key, needs internet, decent quality)
- *   openai — OpenAI TTS API (PAID ~$15/1M chars, best quality, needs OPENAI_API_KEY)
+ * Engines (FREE):
+ *   edge     — Microsoft Edge TTS (free, Python required, high quality neural)
+ *   gtts     — Google Text-to-Speech (free, needs internet)
+ *   alltalk  — AllTalk TTS local server (http://localhost:7851)
+ *   kokoro   — Kokoro TTS local server (http://localhost:8880, OpenAI-compat)
+ *   fish     — Fish Speech local server (http://localhost:8080)
  *
- * For long texts, splits into ~3500-char sentence-boundary chunks,
- * generates each, then binary-concatenates into one final MP3.
+ * Engines (PAID):
+ *   openai   — OpenAI TTS API (~$15/1M chars, needs OPENAI_API_KEY)
+ *
+ * Local servers reachable from Docker via host.docker.internal.
+ * Override URL with env vars: ALLTALK_URL, KOKORO_URL, FISH_SPEECH_URL
  *
  * Body: { projectId, voice?, engine? }
  * Returns: { audioUrl, chunks, totalChars, fileSizeBytes, voice, engine }
@@ -106,6 +111,107 @@ print("ok")
   if (size < 100) throw new Error(`gTTS chunk output empty: ${outPath}`);
 }
 
+// ── AllTalk TTS chunk generator ───────────────────────────────────────────────
+// AllTalk API: POST /api/tts-generate (form-data) or /api/generate (JSON v2)
+// Default port: 7851
+
+async function generateChunkAllTalk(
+  text: string,
+  voice: string,
+  outPath: string
+): Promise<void> {
+  const base = process.env.ALLTALK_URL ?? "http://host.docker.internal:7851";
+  const form = new FormData();
+  form.append("text_input", text);
+  form.append("text_filtering", "standard");
+  form.append("character_voice_gen", voice || "female_01.wav");
+  form.append("narrator_enabled", "false");
+  form.append("narrator_voice_gen", "male_01.wav");
+  form.append("output_file_name", `chunk_at_${Date.now()}`);
+  form.append("output_file_timestamp", "true");
+  form.append("autoplay", "false");
+  form.append("autoplay_volume", "0.8");
+
+  const res = await fetch(`${base}/api/tts-generate`, {
+    method: "POST", body: form,
+    signal: AbortSignal.timeout(120000),
+  });
+  if (!res.ok) {
+    const err = await res.text().catch(() => "");
+    throw new Error(`AllTalk error ${res.status}: ${err.slice(0, 200)}`);
+  }
+  const json = await res.json() as { output_file_url?: string; output_file_path?: string };
+  // AllTalk returns a URL to the file on its server — fetch and save it
+  const fileUrl = json.output_file_url ?? json.output_file_path;
+  if (!fileUrl) throw new Error("AllTalk returned no output file URL");
+  const dlBase = process.env.ALLTALK_URL ?? "http://host.docker.internal:7851";
+  const dlUrl = fileUrl.startsWith("http") ? fileUrl : `${dlBase}${fileUrl}`;
+  const dlRes = await fetch(dlUrl, { signal: AbortSignal.timeout(30000) });
+  if (!dlRes.ok) throw new Error(`AllTalk file download failed: ${dlRes.status}`);
+  writeFileSync(outPath, Buffer.from(await dlRes.arrayBuffer()));
+  const size = statSync(outPath).size;
+  if (size < 100) throw new Error("AllTalk output empty");
+}
+
+// ── Kokoro TTS chunk generator ────────────────────────────────────────────────
+// Kokoro uses OpenAI-compatible API on port 8880
+// Voices: af_bella, af_sarah, am_adam, bf_emma, bm_george, af_sky, etc.
+
+async function generateChunkKokoro(
+  text: string,
+  voice: string,
+  outPath: string
+): Promise<void> {
+  const base = process.env.KOKORO_URL ?? "http://host.docker.internal:8880";
+  const res = await fetch(`${base}/v1/audio/speech`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "kokoro",
+      input: text,
+      voice: voice || "af_bella",
+      response_format: "mp3",
+    }),
+    signal: AbortSignal.timeout(120000),
+  });
+  if (!res.ok) {
+    const err = await res.text().catch(() => "");
+    throw new Error(`Kokoro error ${res.status}: ${err.slice(0, 200)}`);
+  }
+  writeFileSync(outPath, Buffer.from(await res.arrayBuffer()));
+  const size = statSync(outPath).size;
+  if (size < 100) throw new Error("Kokoro output empty");
+}
+
+// ── Fish Speech chunk generator ───────────────────────────────────────────────
+// Fish Speech API: POST /v1/tts on port 8080
+
+async function generateChunkFish(
+  text: string,
+  voice: string,
+  outPath: string
+): Promise<void> {
+  const base = process.env.FISH_SPEECH_URL ?? "http://host.docker.internal:8080";
+  const res = await fetch(`${base}/v1/tts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      text,
+      format: "mp3",
+      streaming: false,
+      ...(voice ? { reference_id: voice } : {}),
+    }),
+    signal: AbortSignal.timeout(180000),
+  });
+  if (!res.ok) {
+    const err = await res.text().catch(() => "");
+    throw new Error(`Fish Speech error ${res.status}: ${err.slice(0, 200)}`);
+  }
+  writeFileSync(outPath, Buffer.from(await res.arrayBuffer()));
+  const size = statSync(outPath).size;
+  if (size < 100) throw new Error("Fish Speech output empty");
+}
+
 // ── OpenAI TTS chunk generator ────────────────────────────────────────────────
 
 async function generateChunkOpenAI(
@@ -154,26 +260,33 @@ export async function POST(req: NextRequest) {
 
     if (!projectId) return NextResponse.json({ error: "projectId required" }, { status: 400 });
 
-    // Default voices per engine:
-    //   edge   → en-US-AriaNeural  (Microsoft neural, free)
-    //   gtts   → en               (ISO lang code, free)
-    //   openai → nova             (OpenAI, paid)
-    const finalVoice = voice ?? (engine === "openai" ? "nova" : engine === "gtts" ? "en" : "en-US-AriaNeural");
+    // Default voices per engine
+    const defaultVoice: Record<string, string> = {
+      edge:    "en-US-AriaNeural",
+      gtts:    "en",
+      openai:  "nova",
+      alltalk: "female_01.wav",
+      kokoro:  "af_bella",
+      fish:    "",
+    };
+    const finalVoice = voice ?? (defaultVoice[engine] ?? "");
 
     // Load voiceover text
     const vo = await prisma.voiceover.findUnique({ where: { projectId } });
     if (!vo) return NextResponse.json({ error: "Voiceover not found — generate voiceover script first" }, { status: 404 });
 
-    if (!["edge", "gtts", "openai"].includes(engine)) {
-      return NextResponse.json({ error: "engine must be 'edge', 'gtts', or 'openai'" }, { status: 400 });
+    const LOCAL_SERVERS = ["alltalk", "kokoro", "fish"];
+    const VALID_ENGINES = ["edge", "gtts", "openai", ...LOCAL_SERVERS];
+    if (!VALID_ENGINES.includes(engine)) {
+      return NextResponse.json({ error: `engine must be one of: ${VALID_ENGINES.join(", ")}` }, { status: 400 });
     }
 
     const outDir = join(process.cwd(), "public", "generated", "audio");
     if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
 
     const text = vo.fullText;
-    // OpenAI allows 4096 chars, edge-tts/gtts 3500 is safe
-    const chunkSize = engine === "openai" ? 4000 : 3500;
+    // Local servers & OpenAI handle longer chunks; edge/gtts safer at 3500
+    const chunkSize = (engine === "openai" || engine === "kokoro" || engine === "alltalk" || engine === "fish") ? 4000 : 3500;
     const chunks = splitIntoChunks(text, chunkSize);
     const chunkPaths: string[] = [];
     const ts = Date.now();
@@ -191,6 +304,12 @@ export async function POST(req: NextRequest) {
         await generateChunkEdge(python, chunks[i], finalVoice, chunkPath);
       } else if (engine === "gtts") {
         await generateChunkGtts(python, chunks[i], finalVoice, chunkPath);
+      } else if (engine === "alltalk") {
+        await generateChunkAllTalk(chunks[i], finalVoice, chunkPath);
+      } else if (engine === "kokoro") {
+        await generateChunkKokoro(chunks[i], finalVoice, chunkPath);
+      } else if (engine === "fish") {
+        await generateChunkFish(chunks[i], finalVoice, chunkPath);
       } else {
         await generateChunkOpenAI(chunks[i], finalVoice, chunkPath);
       }
@@ -239,16 +358,13 @@ export async function POST(req: NextRequest) {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     if (msg.includes("No module named edge_tts") || msg.includes("edge_tts")) {
-      return NextResponse.json({
-        error: "edge-tts not installed. Run: pip install edge-tts",
-        install: "pip install edge-tts",
-      }, { status: 503 });
+      return NextResponse.json({ error: "edge-tts not installed. Run: pip install edge-tts", install: "pip install edge-tts" }, { status: 503 });
     }
     if (msg.includes("No module named gtts") || msg.includes("gtts")) {
-      return NextResponse.json({
-        error: "gTTS not installed. Run: pip install gtts",
-        install: "pip install gtts",
-      }, { status: 503 });
+      return NextResponse.json({ error: "gTTS not installed. Run: pip install gtts", install: "pip install gtts" }, { status: 503 });
+    }
+    if (msg.includes("ECONNREFUSED") || msg.includes("fetch failed") || msg.includes("connect ECONNREFUSED")) {
+      return NextResponse.json({ error: `Local TTS server not running. Start your server first.\n${msg}` }, { status: 503 });
     }
     return NextResponse.json({ error: msg }, { status: 500 });
   }

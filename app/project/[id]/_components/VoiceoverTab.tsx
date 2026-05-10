@@ -33,10 +33,22 @@ interface TTSResult {
 }
 
 const ENGINES = [
-  { value: "edge",   label: "🆓 Edge TTS (Free · Microsoft Neural · Recommended)",  cost: "free" },
-  { value: "gtts",   label: "🆓 gTTS (Free · Google · Decent quality)",              cost: "free" },
-  { value: "openai", label: "💰 OpenAI TTS (Paid · Best quality · ~$15/1M chars)",   cost: "paid" },
+  // ── Built-in free (pre-installed in Docker) ─────────────────────────────────
+  { value: "edge",    label: "🆓 Edge TTS — Microsoft Neural (built-in, recommended)", group: "Built-in Free" },
+  { value: "gtts",    label: "🆓 gTTS — Google TTS (built-in, needs internet)",        group: "Built-in Free" },
+  // ── Local TTS servers (run on your machine / host) ──────────────────────────
+  { value: "kokoro",  label: "🆓 Kokoro TTS — localhost:8880 (best free quality)",     group: "Local Server" },
+  { value: "alltalk", label: "🆓 AllTalk TTS — localhost:7851",                         group: "Local Server" },
+  { value: "fish",    label: "🆓 Fish Speech — localhost:8080",                         group: "Local Server" },
+  // ── Paid API ─────────────────────────────────────────────────────────────────
+  { value: "openai",  label: "💰 OpenAI TTS — ~$15/1M chars (needs API key)",          group: "Paid API" },
 ];
+
+const LOCAL_SERVER_PORTS: Record<string, string> = {
+  kokoro:  "8880",
+  alltalk: "7851",
+  fish:    "8080",
+};
 
 // Edge TTS voices (used when engine = "edge")
 const EDGE_VOICES = [
@@ -74,6 +86,26 @@ const OPENAI_VOICES = [
   { value: "shimmer", label: "Shimmer — Female (Soft)" },
 ];
 
+// Kokoro voices
+const KOKORO_VOICES = [
+  { value: "af_bella",  label: "Bella — Female (American)" },
+  { value: "af_sarah",  label: "Sarah — Female (American)" },
+  { value: "af_sky",    label: "Sky — Female (American, Bright)" },
+  { value: "am_adam",   label: "Adam — Male (American)" },
+  { value: "am_michael",label: "Michael — Male (American)" },
+  { value: "bf_emma",   label: "Emma — Female (British)" },
+  { value: "bm_george", label: "George — Male (British)" },
+  { value: "bm_lewis",  label: "Lewis — Male (British)" },
+];
+
+// AllTalk voices (default voice files — users can add more)
+const ALLTALK_VOICES = [
+  { value: "female_01.wav", label: "Female 01 (default)" },
+  { value: "male_01.wav",   label: "Male 01 (default)" },
+  { value: "female_02.wav", label: "Female 02" },
+  { value: "male_02.wav",   label: "Male 02" },
+];
+
 export default function VoiceoverTab({ projectId }: { projectId: string }) {
   const [data, setData] = useState<Voiceover | null>(null);
   const [loading, setLoading] = useState(true);
@@ -86,6 +118,7 @@ export default function VoiceoverTab({ projectId }: { projectId: string }) {
   // Full-audio TTS
   const [selectedEngine, setSelectedEngine] = useState("edge");
   const [selectedVoice, setSelectedVoice] = useState("en-US-AriaNeural");
+  const [customVoice, setCustomVoice] = useState(""); // for fish speech (reference_id)
   const [generating, setGenerating] = useState(false);
   const [genResult, setGenResult] = useState<TTSResult | null>(null);
   const [genError, setGenError] = useState<string | null>(null);
@@ -140,15 +173,16 @@ export default function VoiceoverTab({ projectId }: { projectId: string }) {
     setGenError(null);
 
     const chars = data.fullText.length;
-    const chunkSize = selectedEngine === "openai" ? 4000 : 3500;
+    const chunkSize = ["openai","kokoro","alltalk","fish"].includes(selectedEngine) ? 4000 : 3500;
     const estChunks = Math.ceil(chars / chunkSize);
     setGenProgress(`Preparing ${estChunks} chunk${estChunks > 1 ? "s" : ""} (~${Math.round(chars / 1000)}k chars) via ${selectedEngine}…`);
 
+    const voiceToSend = selectedEngine === "fish" ? (customVoice || "") : selectedVoice;
     try {
       const r = await fetch("/api/tts/generate-full", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, voice: selectedVoice, engine: selectedEngine }),
+        body: JSON.stringify({ projectId, voice: voiceToSend, engine: selectedEngine }),
       });
       const result = await r.json();
       if (r.ok) {
@@ -272,43 +306,73 @@ export default function VoiceoverTab({ projectId }: { projectId: string }) {
         </div>
 
         {/* Engine picker */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <label className="text-xs text-gray-500 shrink-0">Engine:</label>
+        <div className="space-y-1">
+          <label className="text-xs text-gray-500">Engine:</label>
           <select
             value={selectedEngine}
             onChange={(e) => {
-              setSelectedEngine(e.target.value);
+              const eng = e.target.value;
+              setSelectedEngine(eng);
               // Reset voice to sensible default per engine
-              if (e.target.value === "edge")   setSelectedVoice("en-US-AriaNeural");
-              if (e.target.value === "gtts")   setSelectedVoice("en");
-              if (e.target.value === "openai") setSelectedVoice("nova");
+              const defaults: Record<string,string> = { edge: "en-US-AriaNeural", gtts: "en", openai: "nova", kokoro: "af_bella", alltalk: "female_01.wav", fish: "" };
+              setSelectedVoice(defaults[eng] ?? "");
+              setCustomVoice("");
             }}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-white text-xs outline-none flex-1 min-w-[260px] focus:border-purple-500"
+            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-purple-500"
           >
-            {ENGINES.map((e) => (
-              <option key={e.value} value={e.value}>{e.label}</option>
+            {["Built-in Free","Local Server","Paid API"].map(group => (
+              <optgroup key={group} label={`── ${group} ──`}>
+                {ENGINES.filter(e => e.group === group).map((e) => (
+                  <option key={e.value} value={e.value}>{e.label}</option>
+                ))}
+              </optgroup>
             ))}
           </select>
+          {/* Local server status hint */}
+          {LOCAL_SERVER_PORTS[selectedEngine] && (
+            <p className="text-xs text-blue-400">
+              🔌 Needs server running on port {LOCAL_SERVER_PORTS[selectedEngine]}.
+              {" "}From Docker it connects via <code className="text-green-400">host.docker.internal:{LOCAL_SERVER_PORTS[selectedEngine]}</code>
+            </p>
+          )}
         </div>
 
         {/* Voice picker — changes per engine */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <label className="text-xs text-gray-500 shrink-0">
-            {selectedEngine === "gtts" ? "Language:" : "Voice:"}
-          </label>
-          <select
-            value={selectedVoice}
-            onChange={(e) => setSelectedVoice(e.target.value)}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-white text-xs outline-none flex-1 min-w-[220px] focus:border-purple-500"
-          >
-            {selectedEngine === "edge"   && EDGE_VOICES.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
-            {selectedEngine === "gtts"   && GTTS_LANGS.map((v)  => <option key={v.value} value={v.value}>{v.label}</option>)}
-            {selectedEngine === "openai" && OPENAI_VOICES.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
-          </select>
-          {selectedEngine === "openai" && (
-            <span className="text-yellow-500 text-xs">⚠ Requires OPENAI_API_KEY in .env.local</span>
-          )}
-        </div>
+        {selectedEngine !== "fish" && (
+          <div className="flex items-center gap-3 flex-wrap">
+            <label className="text-xs text-gray-500 shrink-0">
+              {selectedEngine === "gtts" ? "Language:" : "Voice:"}
+            </label>
+            <select
+              value={selectedVoice}
+              onChange={(e) => setSelectedVoice(e.target.value)}
+              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-white text-xs outline-none flex-1 min-w-[220px] focus:border-purple-500"
+            >
+              {selectedEngine === "edge"    && EDGE_VOICES.map((v)    => <option key={v.value} value={v.value}>{v.label}</option>)}
+              {selectedEngine === "gtts"    && GTTS_LANGS.map((v)     => <option key={v.value} value={v.value}>{v.label}</option>)}
+              {selectedEngine === "openai"  && OPENAI_VOICES.map((v)  => <option key={v.value} value={v.value}>{v.label}</option>)}
+              {selectedEngine === "kokoro"  && KOKORO_VOICES.map((v)  => <option key={v.value} value={v.value}>{v.label}</option>)}
+              {selectedEngine === "alltalk" && ALLTALK_VOICES.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
+            </select>
+            {selectedEngine === "openai" && (
+              <span className="text-yellow-500 text-xs">⚠ Requires OPENAI_API_KEY in .env.local</span>
+            )}
+          </div>
+        )}
+
+        {/* Fish Speech: optional reference voice ID */}
+        {selectedEngine === "fish" && (
+          <div className="space-y-1">
+            <label className="text-xs text-gray-500">Reference Voice ID (optional — leave blank for default):</label>
+            <input
+              type="text"
+              value={customVoice}
+              onChange={(e) => setCustomVoice(e.target.value)}
+              placeholder="e.g. my-voice-id"
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-white text-xs outline-none focus:border-purple-500"
+            />
+          </div>
+        )}
 
         {/* Buttons */}
         <div className="flex gap-2 flex-wrap">
@@ -318,9 +382,9 @@ export default function VoiceoverTab({ projectId }: { projectId: string }) {
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-xs font-semibold transition-colors"
           >
             {generating ? (
-                <><span className="animate-spin">⟳</span> Generating full audio…</>
+                <><span className="animate-spin">⟳</span> Generating…</>
               ) : (
-                <>🎙️ Generate Full MP3 ({Math.ceil(data.fullText.length / (selectedEngine === "openai" ? 4000 : 3500))} chunks)</>
+                <>🎙️ Generate Full MP3 ({Math.ceil(data.fullText.length / (["openai","kokoro","alltalk","fish"].includes(selectedEngine) ? 4000 : 3500))} chunks)</>
               )}
           </button>
           <button
@@ -357,11 +421,19 @@ export default function VoiceoverTab({ projectId }: { projectId: string }) {
         {genError && (
           <div className="bg-red-900/20 border border-red-800/40 rounded-lg p-3 space-y-1">
             <div className="text-red-400 text-xs font-medium">❌ Error</div>
-            <div className="text-red-300 text-xs">{genError}</div>
+            <div className="text-red-300 text-xs whitespace-pre-wrap">{genError}</div>
             {(genError.includes("not installed") || genError.includes("Python")) && (
               <div className="text-yellow-300 text-xs bg-yellow-900/20 rounded p-2 mt-1">
-                💡 Install edge-tts: <code className="text-green-400">pip install edge-tts</code>
-                {" "}<button onClick={() => navigator.clipboard.writeText("pip install edge-tts")} className="text-gray-500 hover:text-gray-300 ml-1">📋</button>
+                💡 Install: <code className="text-green-400">pip install edge-tts gtts</code>
+                {" "}<button onClick={() => navigator.clipboard.writeText("pip install edge-tts gtts")} className="text-gray-500 hover:text-gray-300 ml-1">📋</button>
+              </div>
+            )}
+            {genError.includes("not running") && (
+              <div className="text-yellow-300 text-xs bg-yellow-900/20 rounded p-2 mt-1">
+                💡 Start your local TTS server first, then try again.
+                {selectedEngine === "kokoro"  && <> Run: <code className="text-green-400">docker run -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu:v0.2.2</code></>}
+                {selectedEngine === "alltalk" && <> Open AllTalk UI and start the server on port 7851.</>}
+                {selectedEngine === "fish"    && <> Run: <code className="text-green-400">python -m tools.api --listen 0.0.0.0:8080</code></>}
               </div>
             )}
           </div>
@@ -381,10 +453,13 @@ export default function VoiceoverTab({ projectId }: { projectId: string }) {
         )}
 
         <p className="text-xs text-gray-600">
-          {selectedEngine === "edge"   && <>Requires Python + edge-tts (pre-installed in Docker): <code className="text-purple-400">pip install edge-tts</code></>}
-          {selectedEngine === "gtts"   && <>Requires Python + gTTS (pre-installed in Docker): <code className="text-purple-400">pip install gtts</code></>}
-          {selectedEngine === "openai" && <>Requires <code className="text-yellow-400">OPENAI_API_KEY</code> in your .env.local — billed at ~$15/1M chars.</>}
-          {" · "}Audio is saved to the project and available in the Export tab ZIP.
+          {selectedEngine === "edge"    && <>Pre-installed in Docker ✅ — Python + edge-tts</>}
+          {selectedEngine === "gtts"    && <>Pre-installed in Docker ✅ — Python + gTTS</>}
+          {selectedEngine === "kokoro"  && <>Start Kokoro: <code className="text-green-400">docker run -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu:v0.2.2</code></>}
+          {selectedEngine === "alltalk" && <>Start AllTalk from its folder. Accessible at <code className="text-green-400">localhost:7851</code></>}
+          {selectedEngine === "fish"    && <>Start Fish Speech: <code className="text-green-400">python -m tools.api --listen 0.0.0.0:8080</code></>}
+          {selectedEngine === "openai"  && <>Requires <code className="text-yellow-400">OPENAI_API_KEY</code> — billed at ~$15/1M chars.</>}
+          {" · "}Audio saved to project, available in Export tab ZIP.
         </p>
       </div>
 

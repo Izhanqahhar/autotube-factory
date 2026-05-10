@@ -7,9 +7,10 @@ interface ProviderStatus {
   models?: string[];
 }
 
-type Tab = "ai" | "tts" | "images" | "rss" | "keys" | "automation" | "integrations";
+type Tab = "services" | "ai" | "tts" | "images" | "rss" | "keys" | "automation" | "integrations";
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
+  { id: "services", label: "Local Services", icon: "🖥️" },
   { id: "ai", label: "AI Models", icon: "🤖" },
   { id: "tts", label: "TTS / Voice", icon: "🎙️" },
   { id: "images", label: "Image Generation", icon: "🖼️" },
@@ -425,11 +426,29 @@ function EnvVarRow({ envKey, desc, secret, example }: { envKey: string; desc?: s
   );
 }
 
+interface ServiceStatus {
+  id: string;
+  name: string;
+  icon: string;
+  category: string;
+  description: string;
+  defaultPort: number;
+  enabled: boolean;
+  port: number;
+  online: boolean;
+  latencyMs?: number;
+}
+
 export default function SettingsPage() {
-  const [tab, setTab] = useState<Tab>("ai");
+  const [tab, setTab] = useState<Tab>("services");
   const [status, setStatus] = useState<Record<string, ProviderStatus>>({});
   const [loading, setLoading] = useState(true);
   const [testResults, setTestResults] = useState<Record<string, "testing" | "ok" | "fail">>({});
+
+  // Local services
+  const [services, setServices] = useState<ServiceStatus[]>([]);
+  const [servicesLoading, setServicesLoading] = useState(false);
+  const [serviceSaving, setServiceSaving] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetch("/api/models/status")
@@ -438,6 +457,40 @@ export default function SettingsPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  async function loadServices() {
+    setServicesLoading(true);
+    try {
+      const r = await fetch("/api/services/status");
+      if (r.ok) setServices(await r.json());
+    } finally { setServicesLoading(false); }
+  }
+
+  useEffect(() => {
+    if (tab === "services") loadServices();
+  }, [tab]);
+
+  async function toggleService(id: string, enabled: boolean) {
+    setServiceSaving((s) => ({ ...s, [id]: true }));
+    await fetch("/api/services/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, enabled }),
+    });
+    await loadServices();
+    setServiceSaving((s) => ({ ...s, [id]: false }));
+  }
+
+  async function updateServicePort(id: string, port: number) {
+    setServiceSaving((s) => ({ ...s, [id]: true }));
+    await fetch("/api/services/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, port }),
+    });
+    await loadServices();
+    setServiceSaving((s) => ({ ...s, [id]: false }));
+  }
 
   async function testProvider(id: string) {
     setTestResults((t) => ({ ...t, [id]: "testing" }));
@@ -519,6 +572,130 @@ export default function SettingsPage() {
           </button>
         ))}
       </div>
+
+      {/* ── TAB: Local Services ── */}
+      {tab === "services" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-white">🖥️ Local Services</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Manage all locally running services. Toggle on/off and override ports. From Docker, services connect via <code className="text-green-400">host.docker.internal</code>.</p>
+            </div>
+            <button
+              onClick={loadServices}
+              disabled={servicesLoading}
+              className="flex items-center gap-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-gray-300 text-xs px-3 py-1.5 rounded-lg transition-colors"
+            >
+              <span className={servicesLoading ? "animate-spin" : ""}>⟳</span>
+              {servicesLoading ? "Pinging…" : "Refresh All"}
+            </button>
+          </div>
+
+          {/* Group by category */}
+          {["LLM", "TTS", "Image", "Other"].map((cat) => {
+            const catServices = services.filter((s) => s.category === cat);
+            if (catServices.length === 0) return null;
+            return (
+              <div key={cat} className="space-y-2">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-1">{cat}</h3>
+                {catServices.map((svc) => (
+                  <div key={svc.id} className={`bg-gray-900 border rounded-xl p-4 transition-all ${
+                    svc.enabled ? "border-gray-700" : "border-gray-800 opacity-60"
+                  }`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <span className="text-xl shrink-0">{svc.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-white text-sm">{svc.name}</span>
+                            {/* Online/offline badge */}
+                            {svc.enabled && (
+                              <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${
+                                svc.online
+                                  ? "bg-green-900/40 text-green-400"
+                                  : "bg-red-900/30 text-red-400"
+                              }`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${svc.online ? "bg-green-500" : "bg-red-500"}`} />
+                                {svc.online ? `Online${svc.latencyMs ? ` (${svc.latencyMs}ms)` : ""}` : "Offline"}
+                              </span>
+                            )}
+                            {!svc.enabled && (
+                              <span className="text-xs text-gray-600 px-2 py-0.5 rounded-full bg-gray-800">Disabled</span>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-0.5 truncate">{svc.description}</div>
+                        </div>
+                      </div>
+
+                      {/* Toggle switch */}
+                      <button
+                        onClick={() => toggleService(svc.id, !svc.enabled)}
+                        disabled={serviceSaving[svc.id]}
+                        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none disabled:opacity-50 ${
+                          svc.enabled ? "bg-blue-600" : "bg-gray-700"
+                        }`}
+                        title={svc.enabled ? "Click to disable" : "Click to enable"}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                          svc.enabled ? "translate-x-6" : "translate-x-1"
+                        }`} />
+                      </button>
+                    </div>
+
+                    {/* Port editor */}
+                    {svc.enabled && (
+                      <div className="mt-3 flex items-center gap-2 flex-wrap">
+                        <span className="text-xs text-gray-600 shrink-0">Port:</span>
+                        <input
+                          type="number"
+                          defaultValue={svc.port}
+                          onBlur={(e) => {
+                            const p = Number(e.target.value);
+                            if (p > 0 && p !== svc.port) updateServicePort(svc.id, p);
+                          }}
+                          className="w-24 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-white text-xs outline-none focus:border-blue-500"
+                        />
+                        <span className="text-xs text-gray-700">(default: {svc.defaultPort})</span>
+                        <span className="text-xs text-gray-600 ml-2">
+                          URL from Docker: <code className="text-green-400 text-xs">host.docker.internal:{svc.port}</code>
+                        </span>
+                        <button
+                          onClick={() => loadServices()}
+                          disabled={servicesLoading}
+                          className="ml-auto text-xs text-gray-600 hover:text-gray-400 transition-colors"
+                          title="Ping this service"
+                        >
+                          🔄 Ping
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+
+          {services.length === 0 && !servicesLoading && (
+            <div className="text-gray-600 text-sm text-center py-8">No services loaded yet. Click Refresh.</div>
+          )}
+
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-xs text-gray-500 space-y-1">
+            <div className="font-medium text-gray-400 mb-2">💡 Quick start commands</div>
+            {[
+              { label: "Kokoro TTS",  cmd: "docker run -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu:v0.2.2" },
+              { label: "Ollama",      cmd: "winget install Ollama.Ollama && ollama serve" },
+              { label: "ComfyUI",     cmd: "python main.py --listen 0.0.0.0 --port 8188" },
+              { label: "Fish Speech", cmd: "python -m tools.api --listen 0.0.0.0 --port 8080" },
+            ].map(({ label, cmd }) => (
+              <div key={label} className="flex items-center gap-2">
+                <span className="w-24 shrink-0 text-gray-600">{label}</span>
+                <code className="flex-1 bg-gray-800 text-green-400 px-2 py-1 rounded font-mono text-xs overflow-x-auto">{cmd}</code>
+                <button onClick={() => navigator.clipboard.writeText(cmd)} className="text-gray-600 hover:text-gray-400 shrink-0">📋</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── TAB: AI Models ── */}
       {tab === "ai" && (

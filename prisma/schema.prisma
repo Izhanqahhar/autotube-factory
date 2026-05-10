@@ -120,6 +120,11 @@ model Voiceover {
   segments          String
   wordCount         Int      @default(0)
   estimatedDuration Int      @default(0)
+  audioPath         String?
+  audioUrl          String?
+  audioEngine       String?
+  audioVoice        String?
+  audioGeneratedAt  DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 }

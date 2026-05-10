@@ -14,50 +14,36 @@ interface Voiceover {
   segments: string;
   wordCount: number;
   estimatedDuration: number;
+  audioUrl?: string;
+  audioEngine?: string;
+  audioVoice?: string;
+  audioGeneratedAt?: string;
   updatedAt: string;
 }
 
 interface TTSResult {
   path?: string;
+  audioUrl?: string;
   voice?: string;
   engine?: string;
+  chunks?: number;
+  totalChars?: number;
+  fileSizeBytes?: number;
   error?: string;
 }
 
-const TTS_ENGINES = [
-  {
-    id: "edge",
-    label: "🔵 Edge TTS",
-    description: "Free, no key, 300+ voices",
-    apiPath: "/api/tts/edge",
-    voices: [
-      { value: "en-US-AriaNeural", label: "Aria (US, Female)" },
-      { value: "en-US-GuyNeural", label: "Guy (US, Male)" },
-      { value: "en-US-JennyNeural", label: "Jenny (US, Female)" },
-      { value: "en-US-ChristopherNeural", label: "Christopher (US, Male)" },
-      { value: "en-GB-SoniaNeural", label: "Sonia (UK, Female)" },
-      { value: "en-GB-RyanNeural", label: "Ryan (UK, Male)" },
-      { value: "en-AU-NatashaNeural", label: "Natasha (AU, Female)" },
-      { value: "en-AU-WilliamNeural", label: "William (AU, Male)" },
-    ],
-    langField: "voice",
-    requiresPython: true,
-    installCmd: "pip install edge-tts",
-  },
-  {
-    id: "gtts",
-    label: "🟢 gTTS",
-    description: "Free Google TTS, Python",
-    apiPath: "/api/tts/gtts",
-    voices: [
-      { value: "en", label: "English (US)" },
-      { value: "en-uk", label: "English (UK)" },
-      { value: "en-au", label: "English (AU)" },
-    ],
-    langField: "lang",
-    requiresPython: true,
-    installCmd: "pip install gtts",
-  },
+const VOICES = [
+  { value: "en-US-AriaNeural",        label: "Aria — US Female (Natural)" },
+  { value: "en-US-GuyNeural",         label: "Guy — US Male" },
+  { value: "en-US-JennyNeural",       label: "Jenny — US Female (Friendly)" },
+  { value: "en-US-ChristopherNeural", label: "Christopher — US Male (Professional)" },
+  { value: "en-US-TonyNeural",        label: "Tony — US Male (Confident)" },
+  { value: "en-US-SaraNeural",        label: "Sara — US Female (Professional)" },
+  { value: "en-GB-SoniaNeural",       label: "Sonia — British Female" },
+  { value: "en-GB-RyanNeural",        label: "Ryan — British Male" },
+  { value: "en-AU-NatashaNeural",     label: "Natasha — Australian Female" },
+  { value: "en-AU-WilliamNeural",     label: "William — Australian Male" },
+  { value: "en-IN-NeerjaNeural",      label: "Neerja — Indian English Female" },
 ];
 
 export default function VoiceoverTab({ projectId }: { projectId: string }) {
@@ -69,13 +55,17 @@ export default function VoiceoverTab({ projectId }: { projectId: string }) {
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // TTS state
-  const [selectedEngine, setSelectedEngine] = useState("edge");
+  // Full-audio TTS
   const [selectedVoice, setSelectedVoice] = useState("en-US-AriaNeural");
-  const [ttsGenerating, setTtsGenerating] = useState(false);
-  const [ttsResult, setTtsResult] = useState<TTSResult | null>(null);
-  const [ttsError, setTtsError] = useState<string | null>(null);
-  const [showTtsPanel, setShowTtsPanel] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [genResult, setGenResult] = useState<TTSResult | null>(null);
+  const [genError, setGenError] = useState<string | null>(null);
+  const [genProgress, setGenProgress] = useState<string | null>(null);
+
+  // Quick preview TTS (first 5000 chars)
+  const [previewGenerating, setPreviewGenerating] = useState(false);
+  const [previewResult, setPreviewResult] = useState<TTSResult | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -113,216 +103,240 @@ export default function VoiceoverTab({ projectId }: { projectId: string }) {
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "voiceover.txt"; a.click();
   }
 
-  const engine = TTS_ENGINES.find((e) => e.id === selectedEngine) ?? TTS_ENGINES[0];
-
-  // Reset voice when engine changes
-  function handleEngineChange(engineId: string) {
-    setSelectedEngine(engineId);
-    const eng = TTS_ENGINES.find((e) => e.id === engineId);
-    if (eng) setSelectedVoice(eng.voices[0].value);
-    setTtsResult(null);
-    setTtsError(null);
-  }
-
-  async function generateTTS() {
+  // ── Full audio generation (chunked) ────────────────────────────────────────
+  async function generateFullAudio() {
     if (!data) return;
-    setTtsGenerating(true);
-    setTtsResult(null);
-    setTtsError(null);
+    setGenerating(true);
+    setGenResult(null);
+    setGenError(null);
 
-    // Truncate text to 5000 chars for TTS (large texts take too long)
-    const text = data.fullText.slice(0, 5000);
+    const chars = data.fullText.length;
+    const estChunks = Math.ceil(chars / 3500);
+    setGenProgress(`Preparing ${estChunks} chunk${estChunks > 1 ? "s" : ""} (~${Math.round(chars / 1000)}k chars)…`);
 
     try {
-      const body: Record<string, string> = { text };
-      if (engine.langField === "voice") body.voice = selectedVoice;
-      else body.lang = selectedVoice;
-
-      const r = await fetch(engine.apiPath, {
+      const r = await fetch("/api/tts/generate-full", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ projectId, voice: selectedVoice, engine: "edge" }),
       });
       const result = await r.json();
       if (r.ok) {
-        setTtsResult(result);
+        setGenResult(result);
+        // Reload voiceover to get saved audioUrl from DB
+        await load();
       } else {
-        setTtsError(result.error ?? result.message ?? "TTS generation failed");
+        setGenError(result.error ?? "Full audio generation failed");
       }
-    } catch (e: unknown) {
-      setTtsError(e instanceof Error ? e.message : "Network error");
+    } catch (e) {
+      setGenError(e instanceof Error ? e.message : "Network error");
     } finally {
-      setTtsGenerating(false);
+      setGenerating(false);
+      setGenProgress(null);
     }
   }
 
-  if (loading) return <div className="text-gray-500 py-12 text-center">Loading voiceover...</div>;
+  // ── Quick preview (first 4000 chars via /api/tts/edge) ─────────────────────
+  async function generatePreview() {
+    if (!data) return;
+    setPreviewGenerating(true);
+    setPreviewResult(null);
+    setPreviewError(null);
+    try {
+      const r = await fetch("/api/tts/edge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: data.fullText.slice(0, 4000), voice: selectedVoice }),
+      });
+      const result = await r.json();
+      if (r.ok) setPreviewResult(result);
+      else setPreviewError(result.error ?? "Preview generation failed");
+    } catch (e) {
+      setPreviewError(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setPreviewGenerating(false);
+    }
+  }
+
+  if (loading) return <div className="text-gray-500 py-12 text-center">Loading voiceover…</div>;
+
   if (!data) return (
-    <div className="text-center py-12">
-      <p className="text-gray-500 mb-4">No voiceover yet.</p>
-      <button onClick={regenerate} className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg text-sm transition-colors">
-        🎙️ Generate Voiceover
+    <div className="text-center py-16 space-y-4">
+      <div className="text-4xl">🎙️</div>
+      <p className="text-gray-500">No voiceover script yet.</p>
+      <button
+        onClick={regenerate}
+        className="bg-purple-600 hover:bg-purple-500 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
+      >
+        Generate Voiceover Script
       </button>
     </div>
   );
 
   const segments: Segment[] = (() => { try { return JSON.parse(data.segments); } catch { return []; } })();
+  const estMinutes = Math.round(data.estimatedDuration / 60);
+  const savedAudioUrl = data.audioUrl;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className="bg-blue-900/30 text-blue-300 px-3 py-1 rounded-full text-sm">{data.wordCount} words</span>
-          <span className="bg-gray-800 text-gray-300 px-3 py-1 rounded-full text-sm">~{Math.round(data.estimatedDuration / 60)} min</span>
-          <span className="bg-gray-800 text-gray-300 px-3 py-1 rounded-full text-sm">{segments.length} segments</span>
-        </div>
-        <div className="flex gap-2 flex-wrap">
+    <div className="space-y-5">
+
+      {/* ── Stats bar ── */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="bg-blue-900/30 border border-blue-800/30 text-blue-300 px-3 py-1 rounded-full text-xs">{data.wordCount.toLocaleString()} words</span>
+        <span className="bg-gray-800 text-gray-400 px-3 py-1 rounded-full text-xs">~{estMinutes} min read</span>
+        <span className="bg-gray-800 text-gray-400 px-3 py-1 rounded-full text-xs">{segments.length} segments</span>
+        <span className="bg-gray-800 text-gray-400 px-3 py-1 rounded-full text-xs">{data.fullText.length.toLocaleString()} chars</span>
+        <div className="flex-1" />
+        <div className="flex gap-2">
           <button
             onClick={() => { navigator.clipboard.writeText(data.fullText); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
-            className="text-sm bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-2 rounded-lg transition-colors"
+            className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-400 px-3 py-1.5 rounded-lg transition-colors"
           >
-            {copied ? "✓ Copied" : "📋 Copy All"}
+            {copied ? "✓ Copied" : "📋 Copy"}
           </button>
-          <button onClick={download} className="text-sm bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-2 rounded-lg transition-colors">
-            ⬇ Download .txt
+          <button onClick={download} className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-400 px-3 py-1.5 rounded-lg transition-colors">
+            ⬇ .txt
           </button>
           {!editing && (
             <button onClick={() => { setEditing(true); setEditText(data.fullText); }}
-              className="text-sm bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-2 rounded-lg transition-colors">
+              className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-400 px-3 py-1.5 rounded-lg transition-colors">
               ✏️ Edit
             </button>
           )}
-          <button onClick={regenerate} disabled={regen} className="text-sm bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-gray-300 px-3 py-2 rounded-lg transition-colors">
-            {regen ? "⟳ Regen..." : "🔄 Regenerate"}
+          <button onClick={regenerate} disabled={regen} className="text-xs bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-gray-400 px-3 py-1.5 rounded-lg transition-colors">
+            {regen ? "⟳…" : "🔄 Regen"}
           </button>
         </div>
       </div>
 
-      {/* Free TTS Panel */}
-      <div className="bg-gradient-to-r from-blue-900/20 to-purple-900/20 border border-blue-800/40 rounded-xl p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-white text-sm font-medium">🎙️ Generate Audio (Free)</div>
-            <div className="text-gray-400 text-xs">Edge TTS &amp; gTTS are 100% free — just need Python installed</div>
+      {/* ── Saved Audio Player ── */}
+      {savedAudioUrl && (
+        <div className="bg-green-900/15 border border-green-800/40 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <div className="text-green-400 text-sm font-medium">✅ Full Audio Generated</div>
+              <div className="text-gray-500 text-xs mt-0.5">
+                {data.audioVoice} · {data.audioEngine}
+                {data.audioGeneratedAt && ` · ${new Date(data.audioGeneratedAt).toLocaleDateString()}`}
+              </div>
+            </div>
+            <a
+              href={savedAudioUrl}
+              download
+              className="text-xs bg-green-800/40 hover:bg-green-800/70 text-green-300 px-3 py-1.5 rounded-lg transition-colors"
+            >
+              ⬇ Download MP3
+            </a>
           </div>
-          <button
-            onClick={() => setShowTtsPanel((v) => !v)}
-            className="text-xs bg-blue-800/40 hover:bg-blue-800/70 text-blue-300 px-3 py-1.5 rounded-lg transition-colors"
+          <audio controls src={savedAudioUrl} className="w-full" style={{ height: 40 }} />
+        </div>
+      )}
+
+      {/* ── Audio Generation Panel ── */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-4">
+        <div>
+          <h3 className="font-semibold text-white text-sm">🎙️ Generate Full Audio (Free)</h3>
+          <p className="text-xs text-gray-500 mt-1">
+            Uses Microsoft Edge TTS (free, no API key). Splits long scripts into chunks and merges into one MP3.
+          </p>
+        </div>
+
+        {/* Voice picker */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <label className="text-xs text-gray-500 shrink-0">Voice:</label>
+          <select
+            value={selectedVoice}
+            onChange={(e) => setSelectedVoice(e.target.value)}
+            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-white text-xs outline-none flex-1 min-w-[220px] focus:border-purple-500"
           >
-            {showTtsPanel ? "▲ Hide" : "▼ Show TTS"}
+            {VOICES.map((v) => (
+              <option key={v.value} value={v.value}>{v.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Buttons */}
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={generateFullAudio}
+            disabled={generating || previewGenerating}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-xs font-semibold transition-colors"
+          >
+            {generating ? (
+              <><span className="animate-spin">⟳</span> Generating full audio…</>
+            ) : (
+              <>🎙️ Generate Full MP3 ({Math.ceil(data.fullText.length / 3500)} chunks)</>
+            )}
+          </button>
+          <button
+            onClick={generatePreview}
+            disabled={previewGenerating || generating}
+            className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-300 px-4 py-2 rounded-lg text-xs font-medium transition-colors"
+          >
+            {previewGenerating ? "⟳ Generating…" : "▶ Quick Preview (first 4k chars)"}
           </button>
         </div>
 
-        {showTtsPanel && (
-          <div className="space-y-3 pt-1">
-            {/* Engine selector */}
-            <div className="flex flex-wrap gap-2">
-              {TTS_ENGINES.map((e) => (
-                <button
-                  key={e.id}
-                  onClick={() => handleEngineChange(e.id)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors border ${
-                    selectedEngine === e.id
-                      ? "bg-blue-600/30 border-blue-500 text-white"
-                      : "bg-gray-800/50 border-gray-700 text-gray-400 hover:border-gray-600 hover:text-gray-300"
-                  }`}
-                >
-                  <span>{e.label}</span>
-                  <span className="text-gray-500">{e.description}</span>
-                </button>
-              ))}
+        {/* Progress */}
+        {genProgress && (
+          <div className="text-xs text-yellow-400 bg-yellow-900/20 border border-yellow-800/30 rounded-lg px-3 py-2 flex items-center gap-2">
+            <span className="animate-spin">⟳</span> {genProgress}
+            <span className="text-gray-500 ml-1">— This may take 1–3 min for long scripts…</span>
+          </div>
+        )}
+
+        {/* Full audio success */}
+        {genResult?.audioUrl && (
+          <div className="bg-green-900/20 border border-green-800/40 rounded-lg p-3 space-y-2">
+            <div className="text-green-400 text-xs font-medium">
+              ✅ Full audio generated — {genResult.chunks} chunks, {Math.round((genResult.fileSizeBytes ?? 0) / 1024)}KB
             </div>
+            <audio controls src={genResult.audioUrl} className="w-full" style={{ height: 40 }} />
+            <a href={genResult.audioUrl} download className="inline-flex items-center gap-1 text-xs bg-green-800/40 hover:bg-green-800/70 text-green-300 px-3 py-1.5 rounded-lg transition-colors">
+              ⬇ Download Full MP3
+            </a>
+          </div>
+        )}
 
-            {/* Voice selector */}
-            <div className="flex items-center gap-3 flex-wrap">
-              <label className="text-xs text-gray-500 shrink-0">Voice:</label>
-              <select
-                value={selectedVoice}
-                onChange={(e) => setSelectedVoice(e.target.value)}
-                className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-white text-xs outline-none flex-1 min-w-[200px]"
-              >
-                {engine.voices.map((v) => (
-                  <option key={v.value} value={v.value}>{v.label}</option>
-                ))}
-              </select>
-
-              <button
-                onClick={generateTTS}
-                disabled={ttsGenerating}
-                className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-1.5 rounded-lg text-xs font-medium transition-colors"
-              >
-                {ttsGenerating ? "⟳ Generating..." : "🎙️ Generate Audio"}
-              </button>
-            </div>
-
-            {/* Result */}
-            {ttsResult?.path && (
-              <div className="bg-green-900/20 border border-green-800/40 rounded-lg p-3 space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-green-400 text-xs font-medium">✓ Audio generated!</span>
-                  <span className="text-gray-500 text-xs">{ttsResult.engine} · {ttsResult.voice}</span>
-                </div>
-                <audio controls src={ttsResult.path} className="w-full h-8" />
-                <div className="flex gap-2">
-                  <a
-                    href={ttsResult.path}
-                    download
-                    className="text-xs bg-green-800/40 hover:bg-green-800/70 text-green-300 px-3 py-1.5 rounded-lg transition-colors"
-                  >
-                    ⬇ Download MP3
-                  </a>
-                  <button
-                    onClick={() => navigator.clipboard.writeText(window.location.origin + ttsResult.path!)}
-                    className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg transition-colors"
-                  >
-                    📋 Copy URL
-                  </button>
-                </div>
-                <p className="text-xs text-gray-600">
-                  Note: First 5,000 characters generated. For full audio, split text into segments and generate each.
-                </p>
-              </div>
-            )}
-
-            {ttsError && (
-              <div className="bg-red-900/20 border border-red-800/40 rounded-lg p-3 space-y-2">
-                <div className="text-red-400 text-xs font-medium">⚠️ TTS Error</div>
-                <div className="text-red-300 text-xs">{ttsError}</div>
-                {ttsError.includes("not installed") || ttsError.includes("ENOENT") || ttsError.includes("python") ? (
-                  <div className="bg-gray-900/60 rounded p-2 space-y-1">
-                    <div className="text-xs text-gray-400">Install {engine.label}:</div>
-                    <code className="text-xs text-green-400">{engine.installCmd}</code>
-                    <button
-                      onClick={() => navigator.clipboard.writeText(engine.installCmd)}
-                      className="text-xs text-gray-600 hover:text-gray-400 ml-2"
-                    >
-                      📋
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            )}
-
-            {/* Install tip */}
-            {!ttsResult && !ttsError && (
-              <div className="text-xs text-gray-600">
-                Requires Python: <code className="text-purple-400">{engine.installCmd}</code>
-                <button
-                  onClick={() => navigator.clipboard.writeText(engine.installCmd)}
-                  className="ml-1 text-gray-600 hover:text-gray-400"
-                >
-                  📋
-                </button>
+        {/* Full audio error */}
+        {genError && (
+          <div className="bg-red-900/20 border border-red-800/40 rounded-lg p-3 space-y-1">
+            <div className="text-red-400 text-xs font-medium">❌ Error</div>
+            <div className="text-red-300 text-xs">{genError}</div>
+            {(genError.includes("not installed") || genError.includes("Python")) && (
+              <div className="text-yellow-300 text-xs bg-yellow-900/20 rounded p-2 mt-1">
+                💡 Install edge-tts: <code className="text-green-400">pip install edge-tts</code>
+                {" "}<button onClick={() => navigator.clipboard.writeText("pip install edge-tts")} className="text-gray-500 hover:text-gray-300 ml-1">📋</button>
               </div>
             )}
           </div>
         )}
+
+        {/* Preview success */}
+        {previewResult?.path && (
+          <div className="bg-gray-800/50 border border-gray-700/50 rounded-lg p-3 space-y-2">
+            <div className="text-gray-300 text-xs">▶ Preview (first 4k chars) — {previewResult.voice}</div>
+            <audio controls src={previewResult.path} className="w-full" style={{ height: 36 }} />
+          </div>
+        )}
+
+        {/* Preview error */}
+        {previewError && (
+          <div className="text-red-400 text-xs bg-red-900/20 border border-red-800/30 rounded-lg px-3 py-2">❌ {previewError}</div>
+        )}
+
+        <p className="text-xs text-gray-600">
+          Requires Python + edge-tts: <code className="text-purple-400">pip install edge-tts</code>
+          {" · "}Audio is saved to project and available in the Export tab ZIP.
+        </p>
       </div>
 
-      {/* Full Text */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-        <h3 className="font-semibold text-white mb-3">Full Voiceover Text</h3>
+      {/* ── Full Text ── */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-white text-sm">Full Voiceover Script</h3>
+          <span className="text-xs text-gray-600">{data.fullText.length.toLocaleString()} chars</span>
+        </div>
         {editing ? (
           <div className="space-y-3">
             <textarea
@@ -334,7 +348,7 @@ export default function VoiceoverTab({ projectId }: { projectId: string }) {
             <div className="flex gap-2">
               <button onClick={saveEdit} disabled={saving}
                 className="bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm transition-colors">
-                {saving ? "Saving..." : "Save"}
+                {saving ? "Saving…" : "Save"}
               </button>
               <button onClick={() => setEditing(false)} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-4 py-2 rounded-lg text-sm transition-colors">
                 Cancel
@@ -346,34 +360,33 @@ export default function VoiceoverTab({ projectId }: { projectId: string }) {
         )}
       </div>
 
-      {/* Segments */}
+      {/* ── Timed Segments ── */}
       {segments.length > 0 && (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-3">
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-white">Timed Segments ({segments.length})</h3>
-            <span className="text-xs text-gray-500">Each segment can be fed to TTS independently for precise audio sync</span>
+            <h3 className="font-semibold text-white text-sm">Timed Segments ({segments.length})</h3>
+            <span className="text-xs text-gray-600">Used for subtitle sync and scene timing</span>
           </div>
-          <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
+          <div className="space-y-1.5 max-h-[400px] overflow-y-auto pr-1">
             {segments.map((seg, i) => (
-              <div key={i} className="flex gap-3 bg-gray-800/50 rounded-lg px-3 py-2 group">
-                <span className="text-xs text-purple-400 font-mono whitespace-nowrap shrink-0 pt-0.5">
+              <div key={i} className="flex gap-3 bg-gray-800/50 rounded-lg px-3 py-2 group hover:bg-gray-800/80 transition-colors">
+                <span className="text-xs text-purple-400 font-mono whitespace-nowrap shrink-0 pt-0.5 w-24">
                   {formatTime(seg.timeStart)}–{formatTime(seg.timeEnd)}
                 </span>
                 <span className="text-gray-300 text-sm leading-relaxed flex-1">{seg.text}</span>
-                <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => navigator.clipboard.writeText(seg.text)}
-                    className="text-gray-600 hover:text-gray-400 text-xs pt-0.5"
-                    title="Copy segment"
-                  >
-                    📋
-                  </button>
-                </div>
+                <button
+                  onClick={() => navigator.clipboard.writeText(seg.text)}
+                  className="text-gray-600 hover:text-gray-400 text-xs shrink-0 opacity-0 group-hover:opacity-100 transition-opacity pt-0.5"
+                  title="Copy segment"
+                >
+                  📋
+                </button>
               </div>
             ))}
           </div>
         </div>
       )}
+
     </div>
   );
 }

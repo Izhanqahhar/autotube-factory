@@ -38,7 +38,6 @@ services:
 
   # ── Optional: Kokoro TTS (best free quality) ────────────────────────────────
   # Start with: docker compose --profile tts up -d
-  # Or always on: change "tts" profile to remove it and just keep the service
   kokoro:
     image: ghcr.io/remsky/kokoro-fastapi-cpu:v0.2.2
     container_name: kokoro-tts
@@ -47,34 +46,64 @@ services:
     ports:
       - "8880:8880"
 
-  # ── Optional: Ollama in Docker (local LLM) ────────────────────────────────────
-  # Start: docker compose --profile llm up -d
-  # Pull Hermes: docker exec ollama ollama pull hermes3:8b
+  # ── Optional: Ollama in Docker (local LLM) ──────────────────────────────────
+  # Use ONLY if Ollama is NOT already running on your host machine.
+  # If host Ollama is running (port 11434), AutoTube reaches it automatically.
   #
-  # NOTE: No host port binding — avoids conflict if Ollama is ALSO running on host.
-  # Accessible within Docker network as http://ollama:11434
-  # AutoTube + Open WebUI both reach it via the Docker network automatically.
-  # If you ONLY have Docker Ollama (not host Ollama), set in .env.local:
-  #   OLLAMA_URL=http://ollama:11434
+  # Start:          docker compose --profile llm up -d
+  # Auto-pull on start via ollama-init service below.
+  # With Open WebUI: docker compose --profile llm --profile webui up -d
   ollama:
     image: ollama/ollama:latest
     container_name: ollama
     profiles: ["llm"]
     restart: unless-stopped
-    # No ports: — avoids "port already in use" if host Ollama is running
+    # No host port binding — avoids conflict when host Ollama is running.
+    # Accessible within Docker network as ollama:11434
     expose:
       - "11434"
     volumes:
       - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "bash", "-c", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
-  # ── Optional: Open WebUI — browser UI for Ollama ─────────────────────────────
+  # ── Ollama init — auto-pulls Hermes 3 8B when Docker Ollama starts ──────────
+  # Runs once, exits after pull. Models stored in ollama-models volume.
+  # To pull more models: docker exec ollama ollama pull hermes3:70b
+  ollama-init:
+    image: curlimages/curl:latest
+    container_name: ollama-init
+    profiles: ["llm"]
+    restart: "no"
+    entrypoint: >
+      sh -c "
+        echo 'Waiting for Ollama to be ready...';
+        until curl -sf http://ollama:11434/api/tags > /dev/null; do sleep 2; done;
+        echo 'Pulling hermes3:8b (best for AutoTube scripts)...';
+        curl -sf -X POST http://ollama:11434/api/pull -d '{\"name\":\"hermes3:8b\"}' | cat;
+        echo 'Pulling hermes3:3b (fast/small)...';
+        curl -sf -X POST http://ollama:11434/api/pull -d '{\"name\":\"hermes3:3b\"}' | cat;
+        echo 'Done! Hermes 3 ready.';
+      "
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+  # ── Open WebUI — ChatGPT-like browser UI for Ollama / Hermes ────────────────
   # Access at: http://localhost:3002
-  # Scenario A — Ollama on your host machine (already running):
+  #
+  # Scenario A (host Ollama already running):
   #   docker compose --profile webui up -d
-  # Scenario B — Ollama in Docker (no host Ollama):
+  # Scenario B (Docker Ollama, no host Ollama):
   #   docker compose --profile llm --profile webui up -d
   #
-  # Open WebUI checks BOTH endpoints automatically via OLLAMA_BASE_URLS.
+  # Hermes 3 8B is pre-set as the default model.
+  # AutoTube generated files (images, audio, etc.) are visible in Open WebUI
+  # under /workspace — you can reference them in chat.
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
     container_name: open-webui
@@ -83,12 +112,23 @@ services:
     ports:
       - "3002:8080"
     environment:
-      # Tries Docker Ollama first, then falls back to host Ollama — both work
+      # Try Docker Ollama first, fall back to host Ollama — both scenarios work
       - OLLAMA_BASE_URLS=http://ollama:11434;http://host.docker.internal:11434
-      - WEBUI_AUTH=false           # set to true to require login
+      - WEBUI_AUTH=false
       - WEBUI_NAME=AutoTube Local AI
+      # Pre-select Hermes 3 8B as the default chat model
+      - DEFAULT_MODELS=hermes3:8b
+      # System prompt context for AutoTube workflow
+      - DEFAULT_SYSTEM_PROMPT=You are an expert YouTube content creator and scriptwriter. You help with writing scripts, voiceover copy, video ideas, SEO titles, descriptions, and content strategy. Be concise, engaging, and optimised for YouTube audiences.
+      # RAG / document workspace — share AutoTube generated files
+      - DOCS_DIR=/workspace/generated
+      - UPLOAD_DIR=/workspace/uploads
     volumes:
       - open-webui-data:/app/backend/data
+      # Share AutoTube generated files so you can reference them in Open WebUI chat
+      - autotube-generated:/workspace/generated:ro
+      # Dedicated upload dir for Open WebUI documents
+      - open-webui-uploads:/workspace/uploads
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -97,3 +137,4 @@ volumes:
   autotube-generated:
   ollama-models:
   open-webui-data:
+  open-webui-uploads:

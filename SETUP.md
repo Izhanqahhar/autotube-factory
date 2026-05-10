@@ -52,6 +52,67 @@ Then open: **http://localhost:3001**
 
 ---
 
+## 🤖 Local AI — Ollama + Hermes + Open WebUI (100% Free, No Internet)
+
+Run powerful LLMs **entirely on your machine** — no API key, no cloud, no cost.
+
+### Quick start (one command)
+```bash
+# Start Ollama + Open WebUI (ChatGPT-like interface at http://localhost:3002)
+docker compose --profile webui up -d
+
+# Then pull Hermes 3 (best model for structured JSON / scripts):
+docker exec ollama ollama pull hermes3:8b
+```
+
+### Available Hermes models (pull inside Ollama)
+
+| Model | Command | RAM needed | Best for |
+|---|---|---|---|
+| **Hermes 3 8B** ⭐ | `ollama pull hermes3:8b` | ~6 GB | Scripts, JSON, fast |
+| Hermes 3 3B | `ollama pull hermes3:3b` | ~3 GB | Ultra-fast, low RAM |
+| Hermes 3 70B | `ollama pull hermes3:70b` | ~40 GB | Highest quality |
+| Hermes 2 Yi 10.7B | `ollama pull nous-hermes2:10.7b` | ~8 GB | Reasoning, long context |
+| Hermes 2 Mixtral 8×7B | `ollama pull nous-hermes2-mixtral:8x7b` | ~32 GB | MoE, best variety |
+| Hermes 2 Mistral 7B | `ollama pull nous-hermes-2-mistral-7b-dpo` | ~6 GB | Classic, solid JSON |
+
+### Using Hermes in AutoTube Factory
+
+1. Start Ollama: `docker compose --profile llm up -d`
+2. Pull model: `docker exec ollama ollama pull hermes3:8b`
+3. Go to **Settings → AI Providers**
+4. Select **"Hermes 3 8B"** (or any Hermes variant) in the Model Picker
+5. Generate — no API key needed!
+
+### Open WebUI (http://localhost:3002)
+
+Open WebUI gives you a full **ChatGPT-like chat interface** for all your local Ollama models:
+
+```bash
+# Start Ollama + Open WebUI together:
+docker compose --profile webui up -d
+
+# Open in browser:
+start http://localhost:3002
+```
+
+> **First time:** Open WebUI will ask you to create an admin account (local only).
+> Pull models from the **Models** menu inside Open WebUI, or via `docker exec ollama ollama pull hermes3:8b`.
+
+### Only Ollama (no UI)
+```bash
+# Ollama API only — use from AutoTube Factory
+docker compose --profile llm up -d
+
+# Pull a model:
+docker exec ollama ollama pull hermes3:8b
+
+# Stop when done:
+docker compose --profile llm down
+```
+
+---
+
 ## 🔧 Optional Integrations
 
 Add these to `.env.local` to enable extra features:

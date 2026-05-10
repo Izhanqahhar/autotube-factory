@@ -27,7 +27,14 @@ export const ALL_FREE_MODELS: ModelDefinition[] = [
   { id: "ollama/qwen2.5:14b", name: "Qwen 2.5 14B", provider: "ollama", tier: "local", description: "Alibaba larger model", contextWindow: 32768, costPer1kTokens: 0, supportsJSON: true, speed: "medium" },
   { id: "ollama/deepseek-r1:7b", name: "DeepSeek R1 7B", provider: "ollama", tier: "local", description: "Reasoning-focused model", contextWindow: 32768, costPer1kTokens: 0, supportsJSON: true, speed: "medium" },
   { id: "ollama/deepseek-r1:14b", name: "DeepSeek R1 14B", provider: "ollama", tier: "local", description: "Better reasoning locally", contextWindow: 32768, costPer1kTokens: 0, supportsJSON: true, speed: "slow" },
-  { id: "ollama/nous-hermes-2-mistral-7b-dpo", name: "Hermes 2 Mistral 7B", provider: "ollama", tier: "local", description: "Best structured JSON output locally", contextWindow: 8192, costPer1kTokens: 0, supportsJSON: true, speed: "fast", recommended: true },
+  // ── Nous Hermes family (best for structured JSON / instruction following) ───
+  { id: "ollama/hermes3:8b",              name: "Hermes 3 8B",              provider: "ollama", tier: "local", description: "Best local JSON model — Llama 3.1 based, top instruction following", contextWindow: 131072, costPer1kTokens: 0, supportsJSON: true, speed: "fast",   recommended: true },
+  { id: "ollama/hermes3:70b",             name: "Hermes 3 70B",             provider: "ollama", tier: "local", description: "Premium quality — Llama 3.1 70B finetuned, needs 40GB RAM",          contextWindow: 131072, costPer1kTokens: 0, supportsJSON: true, speed: "slow" },
+  { id: "ollama/hermes3:3b",              name: "Hermes 3 3B",              provider: "ollama", tier: "local", description: "Tiny & fast — Llama 3.2 3B finetuned",                               contextWindow: 131072, costPer1kTokens: 0, supportsJSON: true, speed: "ultra-fast" },
+  { id: "ollama/nous-hermes2:10.7b",      name: "Hermes 2 Yi 10.7B",        provider: "ollama", tier: "local", description: "Nous Hermes 2 on Yi — strong JSON & reasoning",                      contextWindow: 4096,   costPer1kTokens: 0, supportsJSON: true, speed: "medium" },
+  { id: "ollama/nous-hermes2-mixtral:8x7b", name: "Hermes 2 Mixtral 8×7B", provider: "ollama", tier: "local", description: "Hermes 2 on Mixtral MoE — high quality, needs 32GB RAM",             contextWindow: 32768,  costPer1kTokens: 0, supportsJSON: true, speed: "medium" },
+  { id: "ollama/nous-hermes-2-mistral-7b-dpo", name: "Hermes 2 Mistral 7B DPO", provider: "ollama", tier: "local", description: "Classic Hermes 2 — best structured JSON output locally",        contextWindow: 8192,   costPer1kTokens: 0, supportsJSON: true, speed: "fast" },
+  { id: "ollama/nous-hermes-llama2-13b",  name: "Hermes Llama 2 13B",       provider: "ollama", tier: "local", description: "Original Hermes on Llama 2 — solid for scripts",                    contextWindow: 4096,   costPer1kTokens: 0, supportsJSON: true, speed: "medium" },
   { id: "ollama/zephyr:7b", name: "Zephyr 7B", provider: "ollama", tier: "local", description: "Good instruction following", contextWindow: 8192, costPer1kTokens: 0, supportsJSON: true, speed: "fast" },
   { id: "ollama/neural-chat:7b", name: "Neural Chat 7B", provider: "ollama", tier: "local", description: "Intel's conversational model", contextWindow: 8192, costPer1kTokens: 0, supportsJSON: true, speed: "fast" },
 
@@ -50,7 +57,11 @@ export const ALL_FREE_MODELS: ModelDefinition[] = [
   { id: "google/gemini-1.5-flash", name: "Gemini 1.5 Flash (Stable)", provider: "google", tier: "free-cloud", description: "Proven stable — 15 req/min free", contextWindow: 1000000, costPer1kTokens: 0, supportsJSON: true, speed: "very-fast", requiresKey: true, keyEnv: "GOOGLE_AI_KEY" },
 
   // ─── OpenRouter Free Models ─────────────────────────────────────────────────
-  { id: "openrouter/meta-llama/llama-3.3-70b-instruct:free", name: "Llama 3.3 70B", provider: "openrouter", tier: "free-cloud", description: "Meta Llama 3.3 70B via OpenRouter free", contextWindow: 131072, costPer1kTokens: 0, supportsJSON: true, speed: "medium", recommended: true, requiresKey: true, keyEnv: "OPENROUTER_API_KEY" },
+  // Hermes via OpenRouter (cloud, no local GPU needed)
+  { id: "openrouter/nousresearch/hermes-3-llama-3.1-405b:free", name: "Hermes 3 405B (OR Free)", provider: "openrouter", tier: "free-cloud", description: "Massive Hermes 3 — Llama 3.1 405B finetuned, free via OpenRouter", contextWindow: 131072, costPer1kTokens: 0, supportsJSON: true, speed: "medium", recommended: true, requiresKey: true, keyEnv: "OPENROUTER_API_KEY" },
+  { id: "openrouter/nousresearch/hermes-3-llama-3.1-70b:free",  name: "Hermes 3 70B (OR Free)",  provider: "openrouter", tier: "free-cloud", description: "Hermes 3 70B via OpenRouter free tier",                          contextWindow: 131072, costPer1kTokens: 0, supportsJSON: true, speed: "medium", requiresKey: true, keyEnv: "OPENROUTER_API_KEY" },
+  { id: "openrouter/nousresearch/hermes-3-llama-3.1-8b",        name: "Hermes 3 8B (OpenRouter)", provider: "openrouter", tier: "free-cloud", description: "Hermes 3 8B via OpenRouter",                                     contextWindow: 131072, costPer1kTokens: 0, supportsJSON: true, speed: "fast",   requiresKey: true, keyEnv: "OPENROUTER_API_KEY" },
+  { id: "openrouter/meta-llama/llama-3.3-70b-instruct:free", name: "Llama 3.3 70B", provider: "openrouter", tier: "free-cloud", description: "Meta Llama 3.3 70B via OpenRouter free", contextWindow: 131072, costPer1kTokens: 0, supportsJSON: true, speed: "medium", requiresKey: true, keyEnv: "OPENROUTER_API_KEY" },
   { id: "openrouter/deepseek/deepseek-r1:free", name: "DeepSeek R1", provider: "openrouter", tier: "free-cloud", description: "Best reasoning model — free via OpenRouter", contextWindow: 163840, costPer1kTokens: 0, supportsJSON: true, speed: "medium", requiresKey: true, keyEnv: "OPENROUTER_API_KEY" },
   { id: "openrouter/deepseek/deepseek-r1-0528:free", name: "DeepSeek R1 0528", provider: "openrouter", tier: "free-cloud", description: "Latest DeepSeek R1 checkpoint", contextWindow: 163840, costPer1kTokens: 0, supportsJSON: true, speed: "medium", requiresKey: true, keyEnv: "OPENROUTER_API_KEY" },
   { id: "openrouter/qwen/qwen3-235b-a22b:free", name: "Qwen 3 235B MoE", provider: "openrouter", tier: "free-cloud", description: "Massive MoE model — free on OpenRouter", contextWindow: 40960, costPer1kTokens: 0, supportsJSON: true, speed: "medium", requiresKey: true, keyEnv: "OPENROUTER_API_KEY" },
@@ -83,7 +94,8 @@ export const ALL_FREE_MODELS: ModelDefinition[] = [
 ];
 
 export const PROVIDER_LABELS: Record<string, { name: string; icon: string; color: string; keyEnv?: string; signupUrl?: string }> = {
-  ollama:      { name: "Ollama (Local)", icon: "🏠", color: "green", signupUrl: "https://ollama.ai" },
+  ollama:      { name: "Ollama (Local)", icon: "🏠", color: "green",  signupUrl: "https://ollama.ai" },
+  openwebui:   { name: "Open WebUI (Local)", icon: "🌐", color: "cyan", signupUrl: "https://github.com/open-webui/open-webui" },
   lmstudio:    { name: "LM Studio (Local)", icon: "🖥️", color: "indigo", signupUrl: "https://lmstudio.ai" },
   groq:        { name: "Groq (Free Cloud)", icon: "⚡", color: "orange", keyEnv: "GROQ_API_KEY", signupUrl: "https://console.groq.com" },
   google:      { name: "Google AI Studio (Free)", icon: "🔵", color: "blue", keyEnv: "GOOGLE_AI_KEY", signupUrl: "https://aistudio.google.com" },
@@ -98,15 +110,17 @@ export const PROVIDER_LABELS: Record<string, { name: string; icon: string; color
 // Google: uses v1beta API with camelCase systemInstruction field
 // Bedrock: cross-region profiles require us-east-1 or us-west-2
 export const FREE_MODEL_PRIORITY = [
-  "us.anthropic.claude-sonnet-4-6",                         // AWS Bedrock Claude Sonnet 4.6
-  "groq/llama-3.3-70b-versatile",                           // Groq — ultra fast, 32K ctx
-  "groq/llama-3.1-8b-instant",                              // Groq — fastest, 131K ctx
-  "google/gemini-2.0-flash",                                // Google — fast, 1M ctx
-  "google/gemini-2.5-flash-preview",                        // Google — reasoning flash
-  "google/gemini-1.5-flash",                                // Google — stable fallback
-  "openrouter/meta-llama/llama-3.3-70b-instruct:free",      // OpenRouter free
-  "openrouter/deepseek/deepseek-r1:free",                   // DeepSeek R1 via OR
-  "ollama/llama3.1:8b",                                     // Local (if installed)
+  "us.anthropic.claude-sonnet-4-6",                                  // AWS Bedrock Claude Sonnet 4.6
+  "groq/llama-3.3-70b-versatile",                                    // Groq — ultra fast, 32K ctx
+  "groq/llama-3.1-8b-instant",                                       // Groq — fastest, 131K ctx
+  "google/gemini-2.0-flash",                                         // Google — fast, 1M ctx
+  "google/gemini-2.5-flash-preview",                                 // Google — reasoning flash
+  "google/gemini-1.5-flash",                                         // Google — stable fallback
+  "openrouter/nousresearch/hermes-3-llama-3.1-405b:free",            // Hermes 3 405B — free cloud
+  "openrouter/meta-llama/llama-3.3-70b-instruct:free",               // OpenRouter free
+  "openrouter/deepseek/deepseek-r1:free",                            // DeepSeek R1 via OR
+  "ollama/hermes3:8b",                                               // Hermes 3 local (best JSON)
+  "ollama/llama3.1:8b",                                              // Local fallback
   "ollama/mistral:7b",
 ];
 

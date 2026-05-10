@@ -28,7 +28,7 @@ export const LOCAL_SERVICES: ServiceDef[] = [
   // ── Image servers ────────────────────────────────────────────────────────────
   { id: "comfyui",   name: "ComfyUI",            icon: "🎨", category: "Image", defaultPort: 8188,  healthPath: "/system_stats",     description: "Local AI image generation (Stable Diffusion)",          envPortKey: "COMFYUI_PORT" },
   // ── Video / other ────────────────────────────────────────────────────────────
-  { id: "openwebui", name: "Open WebUI",          icon: "🌐", category: "Other", defaultPort: 3000,  healthPath: "/health",           description: "Web UI for Ollama & OpenAI",                             envPortKey: "OPEN_WEBUI_PORT" },
+  { id: "openwebui", name: "Open WebUI",          icon: "🌐", category: "Other", defaultPort: 3002,  healthPath: "/health",           description: "ChatGPT-like UI for Ollama & Hermes — localhost:3002",  envPortKey: "OPEN_WEBUI_PORT" },
 ];
 
 async function pingService(svc: ServiceDef, port: number): Promise<{ online: boolean; latencyMs?: number }> {

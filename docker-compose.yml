@@ -49,18 +49,41 @@ services:
 
   # ── Optional: Ollama (local LLM) ────────────────────────────────────────────
   # Start with: docker compose --profile llm up -d
+  # Start with UI: docker compose --profile llm --profile webui up -d
   # Requires GPU for good performance — CPU mode is slow
+  # After starting, pull Hermes: docker exec ollama ollama pull hermes3:8b
   ollama:
     image: ollama/ollama:latest
     container_name: ollama
-    profiles: ["llm"]
+    profiles: ["llm", "webui"]
     restart: unless-stopped
     ports:
       - "11434:11434"
     volumes:
       - ollama-models:/root/.ollama
 
+  # ── Optional: Open WebUI — browser UI for Ollama ─────────────────────────────
+  # Access at: http://localhost:3002
+  # Start with: docker compose --profile webui up -d
+  # Gives a full ChatGPT-like interface to run Hermes 3, Llama, Mistral locally
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    profiles: ["webui"]
+    restart: unless-stopped
+    ports:
+      - "3002:8080"
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - WEBUI_AUTH=false           # set to true to enable login
+      - WEBUI_NAME=AutoTube Local AI
+    volumes:
+      - open-webui-data:/app/backend/data
+    depends_on:
+      - ollama
+
 volumes:
   autotube-db:
   autotube-generated:
   ollama-models:
+  open-webui-data:

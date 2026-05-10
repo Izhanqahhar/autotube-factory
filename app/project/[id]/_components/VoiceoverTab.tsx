@@ -32,7 +32,14 @@ interface TTSResult {
   error?: string;
 }
 
-const VOICES = [
+const ENGINES = [
+  { value: "edge",   label: "🆓 Edge TTS (Free · Microsoft Neural · Recommended)",  cost: "free" },
+  { value: "gtts",   label: "🆓 gTTS (Free · Google · Decent quality)",              cost: "free" },
+  { value: "openai", label: "💰 OpenAI TTS (Paid · Best quality · ~$15/1M chars)",   cost: "paid" },
+];
+
+// Edge TTS voices (used when engine = "edge")
+const EDGE_VOICES = [
   { value: "en-US-AriaNeural",        label: "Aria — US Female (Natural)" },
   { value: "en-US-GuyNeural",         label: "Guy — US Male" },
   { value: "en-US-JennyNeural",       label: "Jenny — US Female (Friendly)" },
@@ -46,6 +53,27 @@ const VOICES = [
   { value: "en-IN-NeerjaNeural",      label: "Neerja — Indian English Female" },
 ];
 
+// gTTS lang codes
+const GTTS_LANGS = [
+  { value: "en",    label: "English (en)" },
+  { value: "en-uk", label: "English UK (en-uk)" },
+  { value: "en-au", label: "English AU (en-au)" },
+  { value: "es",    label: "Spanish (es)" },
+  { value: "fr",    label: "French (fr)" },
+  { value: "de",    label: "German (de)" },
+  { value: "hi",    label: "Hindi (hi)" },
+];
+
+// OpenAI voices
+const OPENAI_VOICES = [
+  { value: "nova",    label: "Nova — Female (Warm)" },
+  { value: "alloy",   label: "Alloy — Neutral" },
+  { value: "echo",    label: "Echo — Male" },
+  { value: "fable",   label: "Fable — British Male" },
+  { value: "onyx",    label: "Onyx — Male (Deep)" },
+  { value: "shimmer", label: "Shimmer — Female (Soft)" },
+];
+
 export default function VoiceoverTab({ projectId }: { projectId: string }) {
   const [data, setData] = useState<Voiceover | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,6 +84,7 @@ export default function VoiceoverTab({ projectId }: { projectId: string }) {
   const [copied, setCopied] = useState(false);
 
   // Full-audio TTS
+  const [selectedEngine, setSelectedEngine] = useState("edge");
   const [selectedVoice, setSelectedVoice] = useState("en-US-AriaNeural");
   const [generating, setGenerating] = useState(false);
   const [genResult, setGenResult] = useState<TTSResult | null>(null);
@@ -111,14 +140,15 @@ export default function VoiceoverTab({ projectId }: { projectId: string }) {
     setGenError(null);
 
     const chars = data.fullText.length;
-    const estChunks = Math.ceil(chars / 3500);
-    setGenProgress(`Preparing ${estChunks} chunk${estChunks > 1 ? "s" : ""} (~${Math.round(chars / 1000)}k chars)…`);
+    const chunkSize = selectedEngine === "openai" ? 4000 : 3500;
+    const estChunks = Math.ceil(chars / chunkSize);
+    setGenProgress(`Preparing ${estChunks} chunk${estChunks > 1 ? "s" : ""} (~${Math.round(chars / 1000)}k chars) via ${selectedEngine}…`);
 
     try {
       const r = await fetch("/api/tts/generate-full", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, voice: selectedVoice, engine: "edge" }),
+        body: JSON.stringify({ projectId, voice: selectedVoice, engine: selectedEngine }),
       });
       const result = await r.json();
       if (r.ok) {
@@ -235,24 +265,49 @@ export default function VoiceoverTab({ projectId }: { projectId: string }) {
       {/* ── Audio Generation Panel ── */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-4">
         <div>
-          <h3 className="font-semibold text-white text-sm">🎙️ Generate Full Audio (Free)</h3>
+          <h3 className="font-semibold text-white text-sm">🎙️ Generate Full Audio MP3</h3>
           <p className="text-xs text-gray-500 mt-1">
-            Uses Microsoft Edge TTS (free, no API key). Splits long scripts into chunks and merges into one MP3.
+            Splits long scripts into chunks and merges into one final MP3. Both free options are pre-installed in Docker.
           </p>
         </div>
 
-        {/* Voice picker */}
+        {/* Engine picker */}
         <div className="flex items-center gap-3 flex-wrap">
-          <label className="text-xs text-gray-500 shrink-0">Voice:</label>
+          <label className="text-xs text-gray-500 shrink-0">Engine:</label>
+          <select
+            value={selectedEngine}
+            onChange={(e) => {
+              setSelectedEngine(e.target.value);
+              // Reset voice to sensible default per engine
+              if (e.target.value === "edge")   setSelectedVoice("en-US-AriaNeural");
+              if (e.target.value === "gtts")   setSelectedVoice("en");
+              if (e.target.value === "openai") setSelectedVoice("nova");
+            }}
+            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-white text-xs outline-none flex-1 min-w-[260px] focus:border-purple-500"
+          >
+            {ENGINES.map((e) => (
+              <option key={e.value} value={e.value}>{e.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Voice picker — changes per engine */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <label className="text-xs text-gray-500 shrink-0">
+            {selectedEngine === "gtts" ? "Language:" : "Voice:"}
+          </label>
           <select
             value={selectedVoice}
             onChange={(e) => setSelectedVoice(e.target.value)}
             className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-white text-xs outline-none flex-1 min-w-[220px] focus:border-purple-500"
           >
-            {VOICES.map((v) => (
-              <option key={v.value} value={v.value}>{v.label}</option>
-            ))}
+            {selectedEngine === "edge"   && EDGE_VOICES.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
+            {selectedEngine === "gtts"   && GTTS_LANGS.map((v)  => <option key={v.value} value={v.value}>{v.label}</option>)}
+            {selectedEngine === "openai" && OPENAI_VOICES.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
           </select>
+          {selectedEngine === "openai" && (
+            <span className="text-yellow-500 text-xs">⚠ Requires OPENAI_API_KEY in .env.local</span>
+          )}
         </div>
 
         {/* Buttons */}
@@ -263,10 +318,10 @@ export default function VoiceoverTab({ projectId }: { projectId: string }) {
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-xs font-semibold transition-colors"
           >
             {generating ? (
-              <><span className="animate-spin">⟳</span> Generating full audio…</>
-            ) : (
-              <>🎙️ Generate Full MP3 ({Math.ceil(data.fullText.length / 3500)} chunks)</>
-            )}
+                <><span className="animate-spin">⟳</span> Generating full audio…</>
+              ) : (
+                <>🎙️ Generate Full MP3 ({Math.ceil(data.fullText.length / (selectedEngine === "openai" ? 4000 : 3500))} chunks)</>
+              )}
           </button>
           <button
             onClick={generatePreview}
@@ -326,8 +381,10 @@ export default function VoiceoverTab({ projectId }: { projectId: string }) {
         )}
 
         <p className="text-xs text-gray-600">
-          Requires Python + edge-tts: <code className="text-purple-400">pip install edge-tts</code>
-          {" · "}Audio is saved to project and available in the Export tab ZIP.
+          {selectedEngine === "edge"   && <>Requires Python + edge-tts (pre-installed in Docker): <code className="text-purple-400">pip install edge-tts</code></>}
+          {selectedEngine === "gtts"   && <>Requires Python + gTTS (pre-installed in Docker): <code className="text-purple-400">pip install gtts</code></>}
+          {selectedEngine === "openai" && <>Requires <code className="text-yellow-400">OPENAI_API_KEY</code> in your .env.local — billed at ~$15/1M chars.</>}
+          {" · "}Audio is saved to the project and available in the Export tab ZIP.
         </p>
       </div>
 

@@ -47,15 +47,17 @@ services:
     ports:
       - "8880:8880"
 
-  # ── Optional: Ollama (local LLM) ────────────────────────────────────────────
-  # Start with: docker compose --profile llm up -d
-  # Start with UI: docker compose --profile llm --profile webui up -d
-  # Requires GPU for good performance — CPU mode is slow
-  # After starting, pull Hermes: docker exec ollama ollama pull hermes3:8b
+  # ── Optional: Ollama in Docker (local LLM) ────────────────────────────────────
+  # Only use this if Ollama is NOT already running on your host machine.
+  # If Ollama is already running on the host (port 11434), skip this profile —
+  # AutoTube and Open WebUI will reach it via host.docker.internal:11434 automatically.
+  #
+  # Start: docker compose --profile llm up -d
+  # Pull Hermes 3: docker exec ollama ollama pull hermes3:8b
   ollama:
     image: ollama/ollama:latest
     container_name: ollama
-    profiles: ["llm", "webui"]
+    profiles: ["llm"]
     restart: unless-stopped
     ports:
       - "11434:11434"
@@ -65,7 +67,12 @@ services:
   # ── Optional: Open WebUI — browser UI for Ollama ─────────────────────────────
   # Access at: http://localhost:3002
   # Start with: docker compose --profile webui up -d
-  # Gives a full ChatGPT-like interface to run Hermes 3, Llama, Mistral locally
+  #
+  # Works with Ollama running EITHER:
+  #   - On your host machine (already running) ← most common case
+  #   - In Docker via --profile llm
+  #
+  # Gives a full ChatGPT-like interface to run Hermes 3, Llama, Mistral locally.
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
     container_name: open-webui
@@ -74,13 +81,14 @@ services:
     ports:
       - "3002:8080"
     environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - WEBUI_AUTH=false           # set to true to enable login
+      # Points to host Ollama (or Docker Ollama — both exposed on host:11434)
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - WEBUI_AUTH=false           # set to true to require login
       - WEBUI_NAME=AutoTube Local AI
     volumes:
       - open-webui-data:/app/backend/data
-    depends_on:
-      - ollama
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   autotube-db:

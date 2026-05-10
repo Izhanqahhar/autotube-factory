@@ -69,7 +69,7 @@ print("ok")
     }
 
     return NextResponse.json({
-      path: `/generated/audio/${safeFilename}`,
+      path: `/api/audio/${safeFilename}`,
       engine: "gtts",
       lang,
       sizeBytes,

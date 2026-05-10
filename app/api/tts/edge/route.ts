@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-      path: `/generated/audio/${safeFilename}`,
+      path: `/api/audio/${safeFilename}`,
       voice,
       engine: "edge-tts",
       sizeBytes,

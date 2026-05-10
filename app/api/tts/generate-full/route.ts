@@ -332,7 +332,8 @@ export async function POST(req: NextRequest) {
       try { unlinkSync(p); } catch { /* ignore */ }
     }
 
-    const audioUrl = `/generated/audio/${finalFilename}`;
+    // Use /api/audio/ route — Next.js standalone doesn't serve volume-mounted public/ as static
+    const audioUrl = `/api/audio/${finalFilename}`;
 
     // Save to DB
     await prisma.voiceover.update({

@@ -48,31 +48,33 @@ services:
       - "8880:8880"
 
   # ── Optional: Ollama in Docker (local LLM) ────────────────────────────────────
-  # Only use this if Ollama is NOT already running on your host machine.
-  # If Ollama is already running on the host (port 11434), skip this profile —
-  # AutoTube and Open WebUI will reach it via host.docker.internal:11434 automatically.
-  #
   # Start: docker compose --profile llm up -d
-  # Pull Hermes 3: docker exec ollama ollama pull hermes3:8b
+  # Pull Hermes: docker exec ollama ollama pull hermes3:8b
+  #
+  # NOTE: No host port binding — avoids conflict if Ollama is ALSO running on host.
+  # Accessible within Docker network as http://ollama:11434
+  # AutoTube + Open WebUI both reach it via the Docker network automatically.
+  # If you ONLY have Docker Ollama (not host Ollama), set in .env.local:
+  #   OLLAMA_URL=http://ollama:11434
   ollama:
     image: ollama/ollama:latest
     container_name: ollama
     profiles: ["llm"]
     restart: unless-stopped
-    ports:
-      - "11434:11434"
+    # No ports: — avoids "port already in use" if host Ollama is running
+    expose:
+      - "11434"
     volumes:
       - ollama-models:/root/.ollama
 
   # ── Optional: Open WebUI — browser UI for Ollama ─────────────────────────────
   # Access at: http://localhost:3002
-  # Start with: docker compose --profile webui up -d
+  # Scenario A — Ollama on your host machine (already running):
+  #   docker compose --profile webui up -d
+  # Scenario B — Ollama in Docker (no host Ollama):
+  #   docker compose --profile llm --profile webui up -d
   #
-  # Works with Ollama running EITHER:
-  #   - On your host machine (already running) ← most common case
-  #   - In Docker via --profile llm
-  #
-  # Gives a full ChatGPT-like interface to run Hermes 3, Llama, Mistral locally.
+  # Open WebUI checks BOTH endpoints automatically via OLLAMA_BASE_URLS.
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
     container_name: open-webui
@@ -81,8 +83,8 @@ services:
     ports:
       - "3002:8080"
     environment:
-      # Points to host Ollama (or Docker Ollama — both exposed on host:11434)
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      # Tries Docker Ollama first, then falls back to host Ollama — both work
+      - OLLAMA_BASE_URLS=http://ollama:11434;http://host.docker.internal:11434
       - WEBUI_AUTH=false           # set to true to require login
       - WEBUI_NAME=AutoTube Local AI
     volumes:

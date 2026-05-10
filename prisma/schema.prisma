@@ -1,0 +1,196 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id              String   @id @default(cuid())
+  title           String
+  niche           String
+  audience        String
+  duration        Int
+  style           String
+  tone            String
+  notes           String?
+  status          String   @default("pending")
+  currentStep     String   @default("idle")
+  errorMessage    String?
+  modelId         String   @default("us.anthropic.claude-sonnet-4-6")
+  modelProvider   String   @default("bedrock")
+  modelUsed       String?
+  researchModelId    String?
+  scriptModelId      String?
+  imagePromptModelId String?
+  exportToAirtable   Boolean  @default(false)
+  exportToNotion     Boolean  @default(false)
+  sourceTopicId   String?
+  thumbnailPath   String?
+  thumbnailUrl    String?
+  subtitleSrtPath String?
+  subtitleVttPath String?
+  metadataJson    String?
+  totalCostUsd    Float    @default(0)
+  generationTimeMs Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  research     Research?
+  script       Script?
+  scenes       Scene[]
+  imagePrompts ImagePrompt[]
+  voiceover    Voiceover?
+  generationLogs GenerationLog[]
+}
+
+model Research {
+  id         String   @id @default(cuid())
+  projectId  String   @unique
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  claims     String
+  sources    String
+  summary    String
+  hooks      String
+  statistics String
+  rawJson    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Script {
+  id           String   @id @default(cuid())
+  projectId    String   @unique
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title        String
+  hook         String
+  body         String
+  cta          String
+  fullScript   String
+  wordCount    Int      @default(0)
+  qualityScore Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Scene {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sceneNumber Int
+  title       String
+  content     String
+  duration    Int
+  beatType    String
+  timeStart   Int
+  timeEnd     Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ImagePrompt {
+  id                  String    @id @default(cuid())
+  projectId           String
+  project             Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  promptNumber        Int
+  timeStart           Int
+  timeEnd             Int
+  minuteBucket        Int
+  beatIndex           Int
+  title               String
+  shortPrompt         String
+  altPrompt           String?
+  imageType           String
+  status              String    @default("pending")
+  generatedImagePath  String?
+  generatedImageUrl   String?
+  imageSource         String?
+  imageGeneratedAt    DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+}
+
+model Voiceover {
+  id                String   @id @default(cuid())
+  projectId         String   @unique
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  fullText          String
+  segments          String
+  wordCount         Int      @default(0)
+  estimatedDuration Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model RssFeed {
+  id          String    @id @default(cuid())
+  name        String
+  url         String    @unique
+  niche       String
+  isActive    Boolean   @default(true)
+  lastFetched DateTime?
+  fetchCount  Int       @default(0)
+  errorCount  Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  items       RssItem[]
+}
+
+model RssItem {
+  id             String    @id @default(cuid())
+  feedId         String
+  feed           RssFeed   @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?
+  url            String
+  publishedAt    DateTime?
+  niche          String
+  tags           String    @default("[]")
+  relevanceScore Float     @default(0)
+  trendScore     Float     @default(0)
+  isBookmarked   Boolean   @default(false)
+  usedForVideo   Boolean   @default(false)
+  projectId      String?
+  createdAt      DateTime  @default(now())
+
+  @@unique([feedId, url])
+}
+
+model TopicSuggestion {
+  id          String   @id @default(cuid())
+  title       String
+  niche       String
+  angle       String
+  whyNow      String
+  sourceItems String   @default("[]")
+  score       Float    @default(0)
+  status      String   @default("pending")
+  projectId   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AppSettings {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model GenerationLog {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  step      String
+  modelId   String
+  provider  String
+  latencyMs Int      @default(0)
+  tokensIn  Int?
+  tokensOut Int?
+  costUsd   Float    @default(0)
+  success   Boolean  @default(true)
+  error     String?
+  createdAt DateTime @default(now())
+}

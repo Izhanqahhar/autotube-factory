@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "novamira-iqtechnologieslt": {
+      "command": "npx",
+      "args": ["-y", "@automattic/mcp-wordpress-remote@latest"],
+      "env": {
+        "WP_API_URL": "https://iqtechnologiesltd.co.uk/wp-json/mcp/novamira",
+        "WP_API_USERNAME": "Salman",
+        "WP_API_PASSWORD": "wIMVVKOcRGjJ9sWREFWa453y"
+      }
+    }
+  }
+}

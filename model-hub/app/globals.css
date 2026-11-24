@@ -1,0 +1,265 @@
+:root {
+  --ink: #102018;
+  --moss: #1f6a4f;
+  --leaf: #3f9d74;
+  --sand: #efe6d4;
+  --foam: #f7f3ea;
+  --line: rgba(16, 32, 24, 0.12);
+  --glow: rgba(63, 157, 116, 0.28);
+  --danger: #9b3b2e;
+  --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --font-body: "Sora", "Avenir Next", "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  color: var(--ink);
+  font-family: var(--font-body);
+  background:
+    radial-gradient(1200px 700px at 12% -10%, rgba(63, 157, 116, 0.22), transparent 55%),
+    radial-gradient(900px 500px at 100% 0%, rgba(239, 230, 212, 0.9), transparent 45%),
+    linear-gradient(165deg, #f4f0e6 0%, #e7f0ea 48%, #d8e7df 100%);
+}
+
+a {
+  color: inherit;
+}
+
+button,
+textarea,
+select {
+  font: inherit;
+}
+
+.shell {
+  width: min(1080px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 1.5rem 0 3rem;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 2.5rem;
+  animation: rise 700ms ease both;
+}
+
+.brand {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.viewer {
+  font-size: 0.85rem;
+  color: rgba(16, 32, 24, 0.72);
+}
+
+.hero {
+  display: grid;
+  gap: 1rem;
+  padding: 0.4rem 0 2rem;
+  animation: rise 850ms ease both;
+}
+
+.hero h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(2.6rem, 7vw, 4.8rem);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  max-width: 11ch;
+}
+
+.hero p {
+  margin: 0;
+  max-width: 36rem;
+  font-size: 1.05rem;
+  line-height: 1.55;
+  color: rgba(16, 32, 24, 0.78);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.panel {
+  border: 1px solid var(--line);
+  background: rgba(247, 243, 234, 0.72);
+  backdrop-filter: blur(10px);
+  border-radius: 18px;
+  padding: 1rem;
+  animation: rise 950ms ease both;
+}
+
+.panel h2 {
+  margin: 0 0 0.75rem;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+}
+
+.provider-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.provider-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(16, 32, 24, 0.06);
+}
+
+.provider-list strong {
+  font-size: 0.95rem;
+}
+
+.pill {
+  align-self: center;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--moss);
+}
+
+.pill.missing {
+  color: var(--danger);
+}
+
+.chat-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.chat-form label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: rgba(16, 32, 24, 0.7);
+}
+
+.chat-form select,
+.chat-form textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.7);
+  padding: 0.75rem 0.85rem;
+  color: var(--ink);
+}
+
+.chat-form textarea {
+  min-height: 7.5rem;
+  resize: vertical;
+}
+
+.actions {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.actions button {
+  border: 0;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--foam);
+  padding: 0.7rem 1.15rem;
+  cursor: pointer;
+  transition: transform 180ms ease, background 180ms ease;
+}
+
+.actions button:hover {
+  transform: translateY(-1px);
+  background: #183226;
+}
+
+.actions button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+  transform: none;
+}
+
+.reply {
+  margin-top: 0.85rem;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.55);
+  padding: 0.9rem 1rem;
+  white-space: pre-wrap;
+  line-height: 1.5;
+  min-height: 4.5rem;
+  animation: fade 400ms ease both;
+}
+
+.badge {
+  display: inline-flex;
+  margin-bottom: 0.55rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: var(--glow);
+  color: var(--moss);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.note {
+  margin: 1rem 0 0;
+  font-size: 0.85rem;
+  color: rgba(16, 32, 24, 0.65);
+  line-height: 1.45;
+}
+
+.error {
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
